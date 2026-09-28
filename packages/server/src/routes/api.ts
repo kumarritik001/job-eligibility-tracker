@@ -338,7 +338,12 @@ export async function registerRoutes(app: JwtApp): Promise<void> {
     const existing = inFlight(userId, id);
     if (existing) return reply.code(202).send({ runId: existing, status: 'RUNNING', alreadyRunning: true });
 
-    const runId = startResearch(userId, id, body.data.careersUrl ?? null);
+    // An omitted careersUrl means "use the one already stored for this company".
+    // Without this fallback the stored URL is silently ignored, and the failure
+    // message ("add the careers URL manually") recommends an action that does
+    // nothing. An explicit null still clears the override.
+    const careersUrl = body.success && body.data.careersUrl !== undefined ? body.data.careersUrl : company.careersUrl;
+    const runId = startResearch(userId, id, careersUrl ?? null);
     return reply.code(202).send({ runId, status: 'RUNNING', alreadyRunning: false });
   });
 

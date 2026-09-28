@@ -198,6 +198,52 @@ test('a second run of the same posting does not duplicate it', async () => {
   assert.equal(detail.json().company.activeJobs, 1);
 });
 
+// Every other research test drives /research/sync, which already had the
+// stored-URL fallback. The async endpoint the UI actually calls ignored the
+// stored careersUrl, so a user who followed the failure message -- "add the
+// company's careers URL manually" -- got the identical failure, and the app
+// was unusable without a paid search key.
+//
+// This test signs up its own user on purpose: it adds a company and a job, and
+// later tests assert on exact company/job counts for the shared user.
+test('async research falls back to the careers URL stored on the company', async () => {
+  const su = await app.inject({
+    method: 'POST',
+    url: '/api/auth/signup',
+    payload: { email: 'async-fallback@example.com', password: 'another-long-test-password' },
+  });
+  assert.equal(su.statusCode, 201, su.body);
+  const mine = { authorization: `Bearer ${su.json().token}` };
+
+  const add = await app.inject({
+    method: 'POST',
+    url: '/api/companies',
+    headers: mine,
+    payload: { name: 'Async Fallback Co', careersUrl: `${fixtureUrl}/careers/jobs/9001` },
+  });
+  assert.equal(add.statusCode, 201, add.body);
+  const companyId = add.json().company.id;
+
+  // Empty body: the override must come from the company record.
+  const start = await app.inject({ method: 'POST', url: `/api/companies/${companyId}/research`, headers: mine, payload: {} });
+  assert.equal(start.statusCode, 202, start.body);
+  const runId = start.json().runId;
+
+  let run: { status: string; jobsFound: number; errorMessage?: string | null } | null = null;
+  for (let i = 0; i < 40; i += 1) {
+    const poll = await app.inject({ url: `/api/research/${runId}`, headers: mine });
+    const r = poll.json().run;
+    if (r && (r.status === 'COMPLETED' || r.status === 'FAILED')) { run = r; break; }
+    await new Promise((res) => setTimeout(res, 250));
+  }
+  assert.ok(run, 'the async run never reached a terminal state');
+  // The run record reports failures as errorMessage; only the sync summary
+  // calls it `error`.
+  assert.equal(run!.errorMessage ?? null, null, `async research failed: ${run!.errorMessage}`);
+  assert.equal(run!.status, 'COMPLETED');
+  assert.equal(run!.jobsFound, 1, 'the stored careers URL must have been used');
+});
+
 test('a source with no postings fails loudly and keeps the stored job', async () => {
   const add = await app.inject({ method: 'POST', url: '/api/companies', headers: auth(), payload: { name: 'Broken Co', careersUrl: `${fixtureUrl}/broken` } });
   const companyId = add.json().company.id;
