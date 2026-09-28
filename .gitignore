@@ -19,3 +19,6 @@ tmp/
 # Local Supabase CLI state, for when the Postgres migration happens.
 supabase/.branches/
 supabase/.temp/
+
+.vercel
+.env*
