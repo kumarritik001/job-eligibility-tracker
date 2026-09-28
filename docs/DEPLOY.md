@@ -8,6 +8,17 @@ requirements, and putting both on one of them breaks something.
 | `packages/web` (Vite SPA) | Vercel | Static assets. Free, global CDN, instant preview deploys per commit. |
 | `packages/server` (Fastify) | Render (or Railway/Fly) | Needs a **writable persistent disk** for SQLite and a **long-lived process** for the 300 s scheduler. |
 
+## Current state
+
+| | |
+|---|---|
+| Web | **Deployed.** https://job-eligibility-tracker.vercel.app — Vercel project `ritspective/job-eligibility-tracker`. Builds and serves; deep links and asset caching verified. |
+| API | **Not deployed.** The app is a shell until the Render service exists: every request goes to the Vercel origin and 404s, and the console says so. |
+| GitHub | https://github.com/kumarritik001/job-eligibility-tracker, 5 commits on `main`. |
+
+To finish: create the Render API, then set `VITE_API_BASE` on Vercel and
+`APP_ORIGIN` on Render. Steps 3–4 below, with the real values.
+
 ## Why the API is not on Vercel
 
 Not a preference — two concrete blockers:
@@ -22,18 +33,35 @@ Not a preference — two concrete blockers:
    multi-second crawls (up to 12 pages at 1200 ms politeness delay), well past
    serverless execution limits.
 
+## Node version drift
+
+Three hosts, three runtimes: `.node-version` pins Render to 22.19.0, your local
+is 22, and Vercel builds on 24.x because the root `engines.node` is `>=22.5.0`.
+The web build only emits static assets, so this is currently harmless — the
+production build has been verified on 24. If a future Vercel default changes,
+suspect this first.
+
 ## Order of operations
 
 Deploy the **API first**. Its URL is the `VITE_API_BASE` the web build needs, and
 the API's `APP_ORIGIN` needs the web URL. One of the two has to exist first;
 this way the loop closes in one direction.
 
+The web app is already up, which is fine: it is static and does not care that the
+API does not exist yet. It just cannot talk to anything until `VITE_API_BASE` is
+set and the project is rebuilt.
+
 ### 1. Push the repo
 
+Done — `main` is on https://github.com/kumarritik001/job-eligibility-tracker.
+For a fresh clone:
+
 ```bash
-git remote add origin https://github.com/<you>/job-eligibility-tracker.git
+git remote add origin https://github.com/kumarritik001/job-eligibility-tracker.git
 git push -u origin main
 ```
+
+Render needs the repo on GitHub to build the Blueprint, so do not skip this.
 
 ### 2. API on Render
 
@@ -43,8 +71,10 @@ Render reads `render.yaml` as a Blueprint:
   `render.yaml` and creates the `jet-api` service plus a 1 GB disk at
   `/var/data`.
 - Set the two required values it marks `sync: false`:
-  - `APP_ORIGIN` — temporarily `http://localhost:5173`; you will replace it in
-    step 3 once Vercel gives you a URL.
+  - `APP_ORIGIN` — `https://job-eligibility-tracker.vercel.app`. This is final:
+    the web origin already exists, so there is no need for a localhost
+    placeholder and a later correction. Add a second comma-separated entry only
+    if you also serve the web app from another origin.
   - `CRAWL_USER_AGENT` — put a real contact address in it.
 - `JWT_SECRET` is auto-generated. **Do not rotate it casually**: changing it
   invalidates every issued JWT and signs out all users.
@@ -68,10 +98,12 @@ throws on that in production rather than running with a guessable secret.
 
 ### 3. Web on Vercel
 
+Already deployed. Only the API base is missing, and it has to be baked in at
+build time — Vite inlines `VITE_API_BASE` into the bundle, so setting it in the
+dashboard alone does nothing until a rebuild happens.
+
 ```bash
-npm i -g vercel
-vercel login
-vercel link          # from the repo root
+vercel link                        # already done: ritspective/job-eligibility-tracker
 vercel env add VITE_API_BASE production      # https://jet-api.onrender.com
 vercel deploy --prod
 ```
@@ -79,7 +111,13 @@ vercel deploy --prod
 `vercel.json` at the repo root tells Vercel to build `packages/web` and publish
 `packages/web/dist`. The rewrite rule is the load-bearing part: without it,
 opening a deep link such as `/jobs/abc123` directly would return Vercel's 404
-instead of the app, because the router only runs in the browser.
+instead of the app, because the router only runs in the browser. Verified
+working in production for `/login`, `/jobs/:id`, `/companies/:id` and `/settings`.
+
+> The GitHub repo is **not** connected to the Vercel project, so pushes do not
+> redeploy on their own — every change needs an explicit `vercel deploy --prod`.
+> Fix with **Vercel → Settings → Git → Connect Git Repository**, or install the
+> Vercel app on the repository.
 
 Leave the API key vars unset on the web side. They are server-side secrets and
 `VITE_`-prefixed vars are baked into the public bundle.
@@ -93,21 +131,33 @@ Leave the API key vars unset on the web side. They are server-side secrets and
 
 ### 4. Close the CORS loop
 
-Now that Vercel has given you a production URL, set it on the API:
+`APP_ORIGIN` was set to the production web origin when the Render service was
+created, so this is already closed — the loop is only open in one direction
+(`VITE_API_BASE`) at that point. Confirm the browser console is free of CORS
+errors and the dashboard loads data.
+
+If you need to change it:
 
 ```
-APP_ORIGIN=https://<your-vercel-project>.vercel.app
+APP_ORIGIN=https://job-eligibility-tracker.vercel.app
 ```
 
 Render restarts the service when an env var changes, so the allowlist takes
 effect immediately. Confirm the browser stops logging CORS errors.
 
 `APP_ORIGIN` accepts a comma-separated list, so you can keep localhost for
-local work:
+local work against the deployed API:
 
 ```
-APP_ORIGIN=https://<your-vercel-project>.vercel.app,http://localhost:5173
+APP_ORIGIN=https://job-eligibility-tracker.vercel.app,http://localhost:5173
 ```
+
+Keep the production origin first: `config.ts` uses the first entry as the
+default `appOrigin`.
+
+Verified behaviour: an allowed origin receives `Access-Control-Allow-Origin`;
+`https://evil.example.com`, `http://localhost:5173.evil.com` and a
+`*.vercel.app` preview subdomain all receive nothing.
 
 ### 5. Preview deployments (optional)
 
