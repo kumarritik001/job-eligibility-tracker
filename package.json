@@ -1,0 +1,35 @@
+{
+  "name": "job-eligibility-tracker",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Live job research + rule-based eligibility tracker",
+  "workspaces": [
+    "packages/shared",
+    "packages/server",
+    "packages/web"
+  ],
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "scripts": {
+    "dev": "concurrently -n api,web -c cyan,magenta \"npm:dev:api\" \"npm:dev:web\"",
+    "dev:api": "npm run dev -w @jet/server",
+    "dev:web": "npm run dev -w @jet/web",
+    "build": "npm run typecheck -w @jet/shared && npm run typecheck -w @jet/server && npm run build -w @jet/web",
+    "start": "npm run start -w @jet/server",
+    "seed": "npm run seed -w @jet/server",
+    "test": "npm run test -w @jet/server && npm run test -w @jet/web",
+    "typecheck": "npm run typecheck -w @jet/shared && npm run typecheck -w @jet/server && npm run typecheck -w @jet/web"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "concurrently": "^9.1.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true,
+    "esbuild@0.25.12": true
+  }
+}

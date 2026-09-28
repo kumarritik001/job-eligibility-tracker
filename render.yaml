@@ -1,0 +1,68 @@
+# Render blueprint for the Fastify API.
+#
+# The API cannot run on Vercel: it needs a writable persistent filesystem for
+# SQLite (Vercel functions are read-only apart from an ephemeral /tmp) and a
+# long-lived process for the scheduler in src/scheduler.ts. Render's web
+# service gives us both.
+#
+# After the first deploy, set APP_ORIGIN to the Vercel URL. Render restarts the
+# service when an env var changes, so the CORS allowlist takes effect on its own.
+
+services:
+  - type: web
+    name: jet-api
+    runtime: node
+    plan: starter # a persistent disk requires a paid plan; free is ephemeral
+    region: singapore
+    # --include=dev is required: NODE_ENV=production is set below, which makes a
+    # bare `npm ci` skip devDependencies, and the server is started with tsx.
+    buildCommand: npm ci --include=dev
+    startCommand: npm run start -w @jet/server
+    healthCheckPath: /api/health
+    # SQLite writes are infrequent; this mainly keeps the service warm so the
+    # first user after a deploy does not eat a cold start.
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "22.19.0"
+      # Generated once and stored by Render. Rotating it invalidates every
+      # issued JWT, so users will be asked to sign in again.
+      - key: JWT_SECRET
+        generateValue: true
+      # SQLite lives on the disk below, not in the container filesystem.
+      - key: DATABASE_URL
+        value: file:/var/data/jet.db
+      # Comma-separated list of allowed browser origins. MUST be set to the
+      # Vercel production URL or every API call from the browser will be
+      # blocked. Locally the default is http://localhost:5173.
+      - key: APP_ORIGIN
+        sync: false
+      # Off by default in production; turn on once you want recurring research.
+      - key: SCHEDULER_ENABLED
+        value: "true"
+      - key: SCHEDULER_TICK_SECONDS
+        value: "300"
+      # The crawler identifies itself; put a real contact address here.
+      - key: CRAWL_USER_AGENT
+        sync: false
+      # --- Optional integrations. All degrade gracefully when unset. ---
+      - key: SERPER_API_KEY
+        sync: false
+      - key: BRAVE_API_KEY
+        sync: false
+      - key: TAVILY_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
+    disk:
+      name: jet-data
+      mountPath: /var/data
+      sizeGB: 1

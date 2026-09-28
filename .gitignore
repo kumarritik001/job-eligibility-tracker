@@ -1,0 +1,21 @@
+node_modules/
+dist/
+build/
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+# The server resolves DATABASE_URL against its own cwd, so the live database
+# lives in packages/server/data/ rather than ./data. The ** prefix is required.
+**/data/*.db
+**/data/*.db-journal
+**/data/*.db-wal
+**/data/*.db-shm
+tmp/
+*.tsbuildinfo
+# Vercel CLI local state (project link). Never commit.
+.vercel/
+# Local Supabase CLI state, for when the Postgres migration happens.
+supabase/.branches/
+supabase/.temp/

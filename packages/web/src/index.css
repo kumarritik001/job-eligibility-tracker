@@ -1,0 +1,180 @@
+@import 'tailwindcss';
+
+/*
+ * Design tokens. Tailwind v4 is CSS-first, so the palette is declared here and
+ * consumed as normal utility classes (bg-surface, text-muted, ...).
+ *
+ * Eligibility status is never communicated by color alone: every badge also
+ * carries a glyph and a text label.
+ */
+
+@theme {
+  --color-canvas: #f6f7f9;
+  --color-surface: #ffffff;
+  --color-surface-2: #f1f3f6;
+  --color-line: #e2e6ec;
+  --color-line-strong: #cbd3dd;
+
+  --color-ink: #10151c;
+  --color-ink-2: #3d4756;
+  --color-muted: #6b7684;
+
+  --color-brand: #1f5fd4;
+  --color-brand-ink: #17408f;
+  --color-brand-soft: #e8f0ff;
+
+  --color-eligible: #16794a;
+  --color-eligible-soft: #e2f5ec;
+  --color-ineligible: #a52a2a;
+  --color-ineligible-soft: #fbeaea;
+  --color-uncertain: #8a5a00;
+  --color-uncertain-soft: #fdf1dc;
+
+  --radius-card: 10px;
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Visible keyboard focus everywhere; never removed, only restyled. */
+  :focus-visible {
+    outline: 2px solid var(--color-brand);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  h1, h2, h3 {
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: var(--color-ink);
+  }
+}
+
+@layer components {
+  .card {
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-card);
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    border-radius: 7px;
+    border: 1px solid transparent;
+    padding: 0.45rem 0.8rem;
+    font-size: 0.83rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 120ms ease, border-color 120ms ease;
+  }
+
+  .btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+
+  .btn-primary {
+    background-color: var(--color-brand);
+    color: #fff;
+  }
+
+  .btn-primary:not(:disabled):hover {
+    background-color: var(--color-brand-ink);
+  }
+
+  .btn-secondary {
+    background-color: var(--color-surface);
+    color: var(--color-ink-2);
+    border-color: var(--color-line-strong);
+  }
+
+  .btn-secondary:not(:disabled):hover {
+    background-color: var(--color-surface-2);
+  }
+
+  .btn-danger {
+    background-color: var(--color-surface);
+    color: var(--color-ineligible);
+    border-color: var(--color-ineligible);
+  }
+
+  .btn-danger:not(:disabled):hover {
+    background-color: var(--color-ineligible-soft);
+  }
+
+  .input {
+    width: 100%;
+    border: 1px solid var(--color-line-strong);
+    border-radius: 7px;
+    background-color: var(--color-surface);
+    padding: 0.45rem 0.6rem;
+    font-size: 0.85rem;
+    color: var(--color-ink);
+  }
+
+  .input::placeholder {
+    color: var(--color-muted);
+  }
+
+  .label {
+    display: block;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--color-muted);
+    margin-bottom: 0.3rem;
+  }
+
+  .tab {
+    border-radius: 999px;
+    border: 1px solid var(--color-line-strong);
+    background-color: var(--color-surface);
+    color: var(--color-ink-2);
+    padding: 0.28rem 0.7rem;
+    font-size: 0.78rem;
+    font-weight: 500;
+    cursor: pointer;
+  }
+
+  .tab[aria-pressed='true'] {
+    background-color: var(--color-brand);
+    border-color: var(--color-brand);
+    color: #fff;
+  }
+
+  .skeleton {
+    background: linear-gradient(90deg, var(--color-surface-2) 25%, #e7eaef 37%, var(--color-surface-2) 63%);
+    background-size: 400% 100%;
+    animation: jet-shimmer 1.4s ease infinite;
+    border-radius: 6px;
+  }
+
+  @keyframes jet-shimmer {
+    0% { background-position: 100% 0; }
+    100% { background-position: 0 0; }
+  }
+}
+
+/* Respect the OS reduced-motion setting. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
