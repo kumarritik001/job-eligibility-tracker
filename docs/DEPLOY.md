@@ -84,6 +84,13 @@ instead of the app, because the router only runs in the browser.
 Leave the API key vars unset on the web side. They are server-side secrets and
 `VITE_`-prefixed vars are baked into the public bundle.
 
+> `vercel.json` sets `installCommand: npm ci --include=dev` on purpose. Vercel
+> sets `NODE_ENV=production` for the build phase, which makes a bare `npm ci`
+> skip devDependencies — and `vite`, `tailwindcss` and `@vitejs/plugin-react`
+> all live there, so the build would fail with "vite: not found". The same trap
+> applies to the Render blueprint, which is why it uses `npm ci --include=dev`
+> too.
+
 ### 4. Close the CORS loop
 
 Now that Vercel has given you a production URL, set it on the API:

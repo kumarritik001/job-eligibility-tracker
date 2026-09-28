@@ -218,7 +218,12 @@ export const dashboardFixture: DashboardResponse = {
     profileComplete: true,
   },
   profileGaps: [],
-  recentJobs: [eligibleJob, eligibleJob],
+  // Two distinct rows: repeating one object here produced duplicate React keys
+  // and buried the warning that would matter.
+  recentJobs: [
+    eligibleJob,
+    makeJob({ id: 'job-recent-2', title: 'Process Engineer II', companyId: 'company-2', companyName: 'Shell', eligibilityStatus: 'UNCERTAIN' }),
+  ],
   closingSoon: [
     { id: 'job-eligible', title: 'Process Engineer', companyName: 'ExxonMobil', closingAt: '2026-10-10T17:00:00.000Z', daysLeft: 3 },
   ],
