@@ -65,7 +65,11 @@ export function buildCsv(jobs: JobListItem[]): string {
 }
 
 export async function buildExcel(jobs: JobListItem[], ownerName: string): Promise<Buffer> {
-  const { Workbook } = await import('exceljs');
+  // exceljs is CommonJS, so under ESM the named export is absent and the real
+  // constructor hangs off `default` -- same interop as pdfkit in buildPdf.
+  // Importing `{ Workbook }` directly yields undefined and `new Workbook()`
+  // throws "Workbook is not a constructor" at request time.
+  const { Workbook } = (await import('exceljs')).default as unknown as typeof import('exceljs');
   const wb = new Workbook();
   const ws = wb.addWorksheet('Jobs');
 

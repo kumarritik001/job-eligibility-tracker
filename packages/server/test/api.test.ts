@@ -323,6 +323,32 @@ test('an unknown export format is rejected', async () => {
   assert.equal(res.statusCode, 400);
 });
 
+// The binary formats are built by two CJS-only packages reached through dynamic
+// import, and both previously shipped untested. exceljs in particular resolves
+// to `undefined` as a named ESM export, so `new Workbook()` threw
+// "Workbook is not a constructor" and /api/export/xlsx answered 500 in
+// production while the whole suite stayed green. Assert on real file bytes, not
+// just the status code -- a 500 that merely set the right content-type would
+// still pass a header-only check.
+test('xlsx export returns a real workbook', async () => {
+  const res = await app.inject({ url: '/api/export/xlsx', headers: auth() });
+  assert.equal(res.statusCode, 200);
+  assert.match(res.headers['content-type'] as string, /spreadsheetml\.sheet/);
+  const body = res.rawPayload as Buffer;
+  assert.ok(body.length > 2000, `xlsx body suspiciously small: ${body.length} bytes`);
+  // XLSX is a zip archive, so it must start with the local file header magic.
+  assert.equal(body.subarray(0, 2).toString('latin1'), 'PK', 'xlsx must be a zip container');
+});
+
+test('pdf export returns a real document', async () => {
+  const res = await app.inject({ url: '/api/export/pdf', headers: auth() });
+  assert.equal(res.statusCode, 200);
+  assert.match(res.headers['content-type'] as string, /application\/pdf/);
+  const body = res.rawPayload as Buffer;
+  assert.ok(body.length > 500, `pdf body suspiciously small: ${body.length} bytes`);
+  assert.equal(body.subarray(0, 5).toString('latin1'), '%PDF-', 'pdf must start with a PDF header');
+});
+
 test('email cannot be enabled without a provider configured', async () => {
   const res = await app.inject({ method: 'PUT', url: '/api/settings/email', headers: auth(), payload: { enabled: true, frequency: 'DAILY', email: 'a@b.com' } });
   assert.equal(res.statusCode, 409);
