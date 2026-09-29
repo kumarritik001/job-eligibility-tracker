@@ -79,6 +79,39 @@ describe('API error mapping', () => {
   });
 });
 
+// The server treats an *omitted* careersUrl as "use the one stored on the
+// company" and an explicit *null* as "clear it" (routes/api.ts:345). Sending
+// `{ careersUrl: null }` for a company that already has a URL therefore makes
+// every UI research run ignore that URL and fall back to discovery -- which
+// fails without a paid search key. The server test posts an empty body, so it
+// cannot see this; only the client can guarantee it.
+describe('research request body', () => {
+  function lastBody(): Record<string, unknown> {
+    const call = (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.at(-1)!;
+    return JSON.parse(call[1]!.body as string) as Record<string, unknown>;
+  }
+
+  it('omits careersUrl when no override is given, so the stored URL is used', async () => {
+    mockRoute('POST', '/api/companies/c1/research', { status: 202, body: { runId: 'r1', status: 'RUNNING' } });
+    await api.startResearch('c1');
+    const body = lastBody();
+    expect('careersUrl' in body).toBe(false);
+    expect(body).toEqual({});
+  });
+
+  it('passes an explicit URL through unchanged', async () => {
+    mockRoute('POST', '/api/companies/c1/research', { status: 202, body: { runId: 'r1', status: 'RUNNING' } });
+    await api.startResearch('c1', 'https://example.com/careers');
+    expect(lastBody()).toEqual({ careersUrl: 'https://example.com/careers' });
+  });
+
+  it('still lets a caller clear the stored URL with an explicit null', async () => {
+    mockRoute('POST', '/api/companies/c1/research', { status: 202, body: { runId: 'r1', status: 'RUNNING' } });
+    await api.startResearch('c1', null);
+    expect(lastBody()).toEqual({ careersUrl: null });
+  });
+});
+
 describe('formatting', () => {
   it('returns null for a missing date rather than "Invalid Date"', () => {
     expect(relativeTime(null)).toBeNull();

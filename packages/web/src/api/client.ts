@@ -279,7 +279,13 @@ export const api = {
   startResearch: (companyId: string, careersUrl?: string | null) =>
     request<ResearchStartResponse>(`/api/companies/${encodeURIComponent(companyId)}/research`, {
       method: 'POST',
-      body: { careersUrl: careersUrl ?? null },
+      // Omit the key entirely when no override was passed. Coercing to `null`
+      // (as `careersUrl ?? null` would) tells the server to CLEAR the stored
+      // careers URL, so a company researched from the UI never uses the URL
+      // already on its record and falls back to discovery -- which fails
+      // without a paid search key. An explicit `null` from a caller still
+      // reaches the server as `null` and still clears.
+      body: careersUrl === undefined ? {} : { careersUrl },
     }),
   researchStatus: (runId: string, signal?: AbortSignal) =>
     request<ResearchStatusResponse>(`/api/research/${encodeURIComponent(runId)}`, { signal }),
