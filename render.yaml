@@ -1,9 +1,36 @@
 # Render blueprint for the Fastify API.
 #
-# The API cannot run on Vercel: it needs a writable persistent filesystem for
-# SQLite (Vercel functions are read-only apart from an ephemeral /tmp) and a
+# The API cannot run on Vercel: it needs a writable filesystem for SQLite
+# (Vercel functions are read-only apart from an ephemeral /tmp) and a
 # long-lived process for the scheduler in src/scheduler.ts. Render's web
 # service gives us both.
+#
+# ## Why plan: free
+#
+# No payment method is required, which is the constraint that matters here.
+# The persistent disk in an earlier version of this file was a paid feature;
+# on the Free plan there is no disk block, and the database lives in the
+# container filesystem instead.
+#
+# ## What the Free plan costs, accepted deliberately
+#
+# Render's Free web service sleeps after ~15 minutes without inbound traffic,
+# and its filesystem is ephemeral: local files are lost on every redeploy,
+# restart and spin-down, with local SQLite databases named in Render's own
+# docs as the example. So:
+#
+#   - Accounts, companies and jobs do not survive a sleep or a redeploy. A
+#     cold start returns an empty database, so a returning user signs up
+#     again. Nothing is corrupted; the data is simply gone.
+#   - The scheduler in src/scheduler.ts is a setInterval, so it ticks only
+#     while the instance is running. After a cold start it finds no users to
+#     research for, because the database is empty.
+#
+# This is fine for a demo, and the app is fully functional whenever the
+# instance is up. It is not a production deployment: nothing here survives.
+# When real durability is needed, migrate to PostgreSQL/Supabase -- see the
+# Supabase section of docs/DEPLOY.md. Note that no PostgreSQL data layer
+# exists yet, so that is separate work, not a config change.
 #
 # Set APP_ORIGIN to https://job-eligibility-tracker.vercel.app when the service
 # is created -- the web origin already exists, so there is no placeholder to
@@ -14,15 +41,18 @@ services:
   - type: web
     name: jet-api
     runtime: node
-    plan: starter # a persistent disk requires a paid plan; free is ephemeral
+    # Free: no payment method required. Ephemeral filesystem, 512 MB RAM,
+    # 0.1 CPU, sleeps after 15 idle minutes. Nothing is kept awake, so a quiet
+    # demo will be asleep by the time anyone opens the link.
+    plan: free
     region: singapore
     # --include=dev is required: NODE_ENV=production is set below, which makes a
     # bare `npm ci` skip devDependencies, and the server is started with tsx.
     buildCommand: npm ci --include=dev
     startCommand: npm run start -w @jet/server
+    # Render's own health check. It is also a cheap way to confirm by hand that
+    # the scheduler came up -- the response reports `"scheduler": true`.
     healthCheckPath: /api/health
-    # SQLite writes are infrequent; this mainly keeps the service warm so the
-    # first user after a deploy does not eat a cold start.
     autoDeploy: true
     envVars:
       - key: NODE_ENV
@@ -30,18 +60,28 @@ services:
       - key: NODE_VERSION
         value: "22.19.0"
       # Generated once and stored by Render. Rotating it invalidates every
-      # issued JWT, so users will be asked to sign in again.
+      # issued JWT, so users will be asked to sign in again. Because it is an
+      # env var rather than a file, it survives the redeploys and spin-downs
+      # that do lose the database -- an existing token stays valid, it just
+      # points at an account that no longer exists.
       - key: JWT_SECRET
         generateValue: true
-      # SQLite lives on the disk below, not in the container filesystem.
+      # Relative path, resolved by db/index.ts against process.cwd(). With
+      # `npm run start -w @jet/server` that is packages/server/, so this lands
+      # in packages/server/data/jet.db. Writable but ephemeral on the Free
+      # plan; .gitignore already excludes it.
       - key: DATABASE_URL
-        value: file:/var/data/jet.db
+        value: file:./data/jet.db
       # Comma-separated list of allowed browser origins. Set it to
       # https://job-eligibility-tracker.vercel.app or every API call from the
       # browser will be blocked. Locally the default is http://localhost:5173.
       - key: APP_ORIGIN
         sync: false
-      # Off by default in production; turn on once you want recurring research.
+      # Off by default in production (config.ts defaults SCHEDULER_ENABLED to
+      # false when NODE_ENV=production), so it must be set explicitly or the
+      # scheduler silently never starts. It runs only while the instance is
+      # awake; a sleeping Free instance does not tick, and a cold start comes
+      # back with an empty database.
       - key: SCHEDULER_ENABLED
         value: "true"
       - key: SCHEDULER_TICK_SECONDS
@@ -49,7 +89,9 @@ services:
       # The crawler identifies itself; put a real contact address here.
       - key: CRAWL_USER_AGENT
         sync: false
-      # --- Optional integrations. All degrade gracefully when unset. ---
+      # --- Optional integrations. All degrade gracefully when unset. --- #
+      # No search key is required: a careers URL entered on the company is
+      # enough for research to run. A key only widens automatic discovery.
       - key: SERPER_API_KEY
         sync: false
       - key: BRAVE_API_KEY
@@ -64,7 +106,6 @@ services:
         sync: false
       - key: EMAIL_FROM
         sync: false
-    disk:
-      name: jet-data
-      mountPath: /var/data
-      sizeGB: 1
+    # No disk block: persistent disks are a paid feature. On the Free plan the
+    # SQLite file lives in the container filesystem and does not outlive the
+    # instance.

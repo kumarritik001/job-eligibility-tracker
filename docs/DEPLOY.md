@@ -6,15 +6,15 @@ requirements, and putting both on one of them breaks something.
 | Piece | Host | Why there |
 |---|---|---|
 | `packages/web` (Vite SPA) | Vercel | Static assets. Free, global CDN, instant preview deploys per commit. |
-| `packages/server` (Fastify) | Render (or Railway/Fly) | Needs a **writable persistent disk** for SQLite and a **long-lived process** for the 300 s scheduler. |
+| `packages/server` (Fastify) | Render (Free) | Needs a **writable filesystem** for SQLite and a **long-lived process** for the 300 s scheduler. |
 
 ## Current state
 
 | | |
 |---|---|
 | Web | **Deployed.** https://job-eligibility-tracker.vercel.app — Vercel project `ritspective/job-eligibility-tracker`. Builds and serves; deep links and asset caching verified. |
-| API | **Not deployed.** The app is a shell until the Render service exists: every request goes to the Vercel origin and 404s, and the console says so. |
-| GitHub | https://github.com/kumarritik001/job-eligibility-tracker, 5 commits on `main`. |
+| API | **Not deployed.** `render.yaml` is now Free-plan and card-free, but the Blueprint does not exist yet. The app is a shell until then: every request goes to the Vercel origin and 404s, and the console says so. |
+| GitHub | https://github.com/kumarritik001/job-eligibility-tracker — Render builds from `main`, so it must be pushed. |
 
 To finish: create the Render API, then set `VITE_API_BASE` on Vercel and
 `APP_ORIGIN` on Render. Steps 3–4 below, with the real values.
@@ -68,18 +68,22 @@ Render needs the repo on GitHub to build the Blueprint, so do not skip this.
 Render reads `render.yaml` as a Blueprint:
 
 - Dashboard → **New** → **Blueprint** → select the repo. Render applies
-  `render.yaml` and creates the `jet-api` service plus a 1 GB disk at
-  `/var/data`.
-- Set the two required values it marks `sync: false`:
+  `render.yaml` and creates the `jet-api` service on the **Free** plan. No
+  payment method is required.
+- Set the values it marks `sync: false` that you actually need:
   - `APP_ORIGIN` — `https://job-eligibility-tracker.vercel.app`. This is final:
     the web origin already exists, so there is no need for a localhost
     placeholder and a later correction. Add a second comma-separated entry only
     if you also serve the web app from another origin.
   - `CRAWL_USER_AGENT` — put a real contact address in it.
 - `JWT_SECRET` is auto-generated. **Do not rotate it casually**: changing it
-  invalidates every issued JWT and signs out all users.
-- `DATABASE_URL=file:/var/data/jet.db` points at the disk, so the database
-  survives redeploys. Back it up by copying that file off the disk.
+  invalidates every issued JWT and signs out all users. Being an env var rather
+  than a file, it does survive the redeploys and spin-downs that lose the
+  database.
+- `DATABASE_URL=file:./data/jet.db` is resolved against `process.cwd()` by
+  `db/index.ts:26`, which is `packages/server/` under the workspace start
+  command, so the file lands at `packages/server/data/jet.db`. Writable, but
+  ephemeral on the Free plan.
 - Note the service URL, e.g. `https://jet-api.onrender.com`.
 
 Verify it before going further:
@@ -92,9 +96,35 @@ It should report `"scheduler": true` and the database as node:sqlite. If the
 service will not start, the usual cause is `JWT_SECRET` missing — config.ts
 throws on that in production rather than running with a guessable secret.
 
-> Free Render instances sleep after inactivity and have **no persistent disk**,
-> so a free plan will lose your database. The blueprint uses `plan: starter` for
-> that reason.
+#### What the Free plan costs
+
+Everything here is a known, accepted consequence of choosing Free, not a bug.
+
+Render's Free web service sleeps after ~15 minutes without inbound traffic, and
+its filesystem is ephemeral — local files are lost on **every spin-down, restart
+and redeploy**, with local SQLite databases named in their own docs as the
+example. In practice:
+
+- **Nothing survives.** Accounts, companies and jobs are gone after a sleep or a
+  redeploy, and a returning user signs up again. Nothing is corrupted; the data
+  is simply absent. `JWT_SECRET` is an env var rather than a file, so it does
+  persist — an old token stays valid but points at an account that no longer
+  exists.
+- **The scheduler only runs while the instance is up.** `setInterval` in
+  `scheduler.ts:68` cannot fire in a sleeping process, and a cold start does
+  not recover it, because the service comes back with an **empty database** and
+  the tick has no users to research for. The app is fully functional whenever
+  the instance is running; scheduled research in the background is not.
+- **First request after idle is slow.** A cold start takes roughly a minute.
+  `curl` it once yourself before handing the link to anyone.
+- **0.1 CPU.** Research crawls (12 pages, 1200 ms politeness delay) will be
+  slow. Harmless, because research is async and returns a `runId`, but not
+  snappy.
+- **SMTP ports 25/465/587 are blocked.** Resend is reached over HTTPS on 443, so
+  email is unaffected.
+- **Cron jobs and background workers are reported unavailable** on the Free
+  tier. This setup relies on neither — the scheduler is in-process, running
+  only while the instance is awake.
 
 ### 3. Web on Vercel
 
@@ -183,8 +213,9 @@ will.
 - **Web**: every Vercel deploy is immutable and promotable. Redeploy a previous
   build from the dashboard; no rebuild needed.
 - **API**: Rollback to the previous deploy in the Render dashboard. The SQLite
-  file is *not* versioned, so roll back the code, not the data. Restore the
-  database by copying a known-good `jet.db` back onto the disk.
+  file is *not* versioned, so roll back the code, not the data. On the Free plan
+  there is no disk to restore from — a rollback rebuilds the container, so the
+  database comes back empty.
 - **Frontend/API contract**: they are deployed independently, so a newer web
   build can briefly run against an older API. Keep additive changes on the
   server until the web side is safely rolled forward.
